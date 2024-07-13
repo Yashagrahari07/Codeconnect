@@ -2,6 +2,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
 const AppError = require("./utils/appError");
+const userRoutes = require("./routes/userRoutes");
 const cors = require("cors");
 var morgan = require("morgan");
 
@@ -16,6 +17,8 @@ app.use(bodyParser.json());
 
 app.use(cors({ credentials: true }));
 express.urlencoded({ extended: false });
+
+app.use("/user", userRoutes);
 
 app.all("*", (req, res, next) => {
     next(new AppError(`Can't find ${req.originalUrl} on this server`, 404));
