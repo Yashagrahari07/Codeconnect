@@ -5,7 +5,6 @@ const AppError = require("../utils/appError");
 const sendEmail = require("../utils/email");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
-const Post = require("../models/postModel");
 
 const hashPassword = async (pass) => {
   pass = await bcrypt.hash(pass, 10);
@@ -130,10 +129,6 @@ exports.verifyAccount = catchAsync(async (req, res) => {
       } else {
         const user = await UnverifiedUser.findOne({ name: data.id });
         if (!user) {
-          // response.message = "Account is already verified!";
-          // response.isError = false;
-          // response.status = 204;
-          // res.redirect(`${process.env.FRONTEND_BASE_URL}/response?message=${response.message}&navigate=${true}&error=${response.isError}&status=${response.status}`);
           res.send("Account is already verified!");
           return;
         }
@@ -147,7 +142,6 @@ exports.verifyAccount = catchAsync(async (req, res) => {
         });
       }
       const message = "Your Account is Verified Successfully :) Please wait you will automatically be redirected to login page";
-      // res.redirect(`${process.env.FRONTEND_BASE_URL}/response?message=${response.message}&navigate=${true}&error=${false}`);
       res.send(`
         <html>
           <head>
@@ -188,6 +182,42 @@ exports.login = catchAsync(async (req, res) => {
 
 exports.logout = catchAsync(async (req, res) => {
   return res.status(200).json(null);
+});
+
+exports.protect = catchAsync(async (req, res, next) => {
+  const { headers } = req;
+  let token;
+  if (
+    headers.authorization &&
+    headers.authorization.startsWith("Bearer")
+  ) {
+    token = headers.authorization.split(" ")[1];
+  }
+  if (!token || token === "undefined" || token === "null") {
+    return next(
+      new AppError("You are not logged in!! Please log in to get access", 401)
+    );
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const freshUser = await User.findById(decoded.id);
+
+    if (!freshUser) {
+      return next(
+        new AppError("The user belonging to this token is not exist", 401)
+      );
+    }
+    req.body.user = freshUser;
+    next();
+  } catch (err) {
+    if (err.message === "jwt expired") {
+      return next(
+        new AppError("Your session is expired!! Please log in again", 401)
+      );
+    }
+  }
 });
 
 exports.forgotPassword = catchAsync(async (req, res, next) => {
@@ -261,80 +291,6 @@ exports.resetPassword = catchAsync(async (req, res, next) => {
   } catch (err) {
     res.status(503).json("Internal server error!!");
   }
-});
-
-exports.myProfile = catchAsync(async (req, res, next) => {
-  res.status(200).json({
-    data: req.user,
-  });
-});
-
-exports.protect = catchAsync(async (req, res, next) => {
-  const { headers } = req;
-  let token;
-  if (
-    headers.authorization &&
-    headers.authorization.startsWith("Bearer")
-  ) {
-    token = headers.authorization.split(" ")[1];
-  }
-  if (!token || token === "undefined" || token === "null") {
-    return next(
-      new AppError("You are not logged in!! Please log in to get access", 401)
-    );
-  }
-
-  try {
-    //* 2) verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    //* 3) check if user is still exist
-    const freshUser = await User.findById(decoded.id);
-
-    if (!freshUser) {
-      return next(
-        new AppError("The user belonging to this token is not exist", 401)
-      );
-    }
-    req.body.user = freshUser;
-    next();
-  } catch (err) {
-    if (err.message === "jwt expired") {
-      return next(
-        new AppError("Your session is expired!! Please log in again", 401)
-      );
-    }
-  }
-});
-
-exports.addToStarred = catchAsync(async (req, res) => {
-  const { postData, user } = req.body;
-  try {
-    const likingUser = await User.findById(user._id);
-
-    if (likingUser.favourites.indexOf(postData._id) === -1)
-      likingUser.favourites.push(postData._id);
-    else
-      likingUser.favourites.splice(likingUser.favourites.indexOf(postData._id), 1);
-
-    await likingUser.save();
-    createSendToken(likingUser, 200, res, '9999 years');
-  } catch (err) {
-    res.status(500).json("Error occurred while processing! Please try again!");
-  }
-});
-
-exports.favourites = catchAsync(async (req, res) => {
-  const { user } = req.body;
-  const response = [];
-
-  for (let i = 0; i < user.favourites.length; ++i) {
-    const post = await Post.findById(user.favourites[i]);
-    const owner = await User.findById(post.creator);
-    response.push({ postData: post, ownerInfo: owner });
-  }
-  response.sort((a, b) => b.postData.createdAt - a.postData.createdAt);
-  res.status(200).json(response);
 });
 
 exports.fetchData = catchAsync(async (req, res) => {
